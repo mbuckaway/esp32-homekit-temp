@@ -1,0 +1,104 @@
+menu "Homekit Configuration"
+
+    config HOMEKIT_USE_HARDCODED_SETUP_CODE
+        bool "Use hard-coded setup code"
+        default y
+        help
+            HomeKit does not recommend having the setup code programmed in the accessory as is.
+            Instead, it expects setup info (salt-verifier pair) generated for the given setup code.
+            Use this option only for testing purposes. For production, the setup info should be
+            used.
+
+    config HOMEKIT_SETUP_CODE
+        string "HomeKit Setup Code"
+        default "111-22-333"
+        depends on HOMEKIT_USE_HARDCODED_SETUP_CODE
+        help
+            Setup code to be used for HomeKot pairing, if hard-coded setup code is enabled.
+
+    config HOMEKIT_SETUP_ID
+        string "HomeKit Setup Id"
+        default "ES32"
+        depends on HOMEKIT_USE_HARDCODED_SETUP_CODE
+        help
+            Setup id to be used for HomeKot pairing, if hard-coded setup code is enabled.
+
+endmenu
+
+menu "Sensor GPIO Configuration"
+    config GPIO_OUTPUT_IO_DHT22
+        int "GPIO PIN for DHT22"
+        default 17
+        range 1 34
+        help
+            GPIO number (IOxx) to connect to the DHT22 data pin
+            GPIOs 35-39 are input-only so cannot be used as outputs.
+        
+    choice BATTERY_ADC_CHANNEL
+        bool "Battery ADC1 Channel Num"
+        depends on IDF_TARGET_ESP32
+        default BATTERY_ADC_CHANNEL_7
+        help
+            The channel of ADC1 used for the BATTERY sensor.
+
+        config BATTERY_ADC_CHANNEL_0
+            bool "ADC Channel 0 (GPIO 36)"
+        config BATTERY_ADC_CHANNEL_1
+            bool "ADC Channel 1 (GPIO 37)"
+        config BATTERY_ADC_CHANNEL_2
+            bool "ADC Channel 2 (GPIO 38)"
+        config BATTERY_ADC_CHANNEL_3
+            bool "ADC Channel 3 (GPIO 39)"
+        config BATTERY_ADC_CHANNEL_4
+            bool "ADC Channel 4 (GPIO 32)"
+        config BATTERY_ADC_CHANNEL_5
+            bool "ADC Channel 5 (GPIO 33)"
+        config BATTERY_ADC_CHANNEL_6
+            bool "ADC Channel 6 (GPIO 34)"
+        config BATTERY_ADC_CHANNEL_7
+            bool "ADC Channel 7 (GPIO 35)"
+    endchoice
+
+    choice BATTERY_ADC_CHANNEL
+        bool "Battery ADC1 Channel Num"
+        depends on IDF_TARGET_ESP32S2
+        default BATTERY_ADC_CHANNEL_6
+        help
+            The channel of ADC1 used for the BATTERY sensor.
+
+        config BATTERY_ADC_CHANNEL_0
+            bool "ADC Channel 0 (GPIO 1)"
+        config BATTERY_ADC_CHANNEL_1
+            bool "ADC Channel 1 (GPIO 2)"
+        config BATTERY_ADC_CHANNEL_2
+            bool "ADC Channel 2 (GPIO 3)"
+        config BATTERY_ADC_CHANNEL_3
+            bool "ADC Channel 3 (GPIO 4)"
+        config BATTERY_ADC_CHANNEL_4
+            bool "ADC Channel 4 (GPIO 5)"
+        config BATTERY_ADC_CHANNEL_5
+            bool "ADC Channel 5 (GPIO 6)"
+        config BATTERY_ADC_CHANNEL_6
+            bool "ADC Channel 6 (GPIO 7)"
+        config BATTERY_ADC_CHANNEL_7
+            bool "ADC Channel 7 (GPIO 8)"
+        config BATTERY_ADC_CHANNEL_8
+            bool "ADC Channel 8 (GPIO 9)"
+        config BATTERY_ADC_CHANNEL_9
+            bool "ADC Channel 9 (GPIO 10)"
+    endchoice
+
+    config BATTERY_ADC_CHANNEL
+        int
+        default 0 if BATTERY_ADC_CHANNEL_0
+        default 1 if BATTERY_ADC_CHANNEL_1
+        default 2 if BATTERY_ADC_CHANNEL_2
+        default 3 if BATTERY_ADC_CHANNEL_3
+        default 4 if BATTERY_ADC_CHANNEL_4
+        default 5 if BATTERY_ADC_CHANNEL_5
+        default 6 if BATTERY_ADC_CHANNEL_6
+        default 7 if BATTERY_ADC_CHANNEL_7
+        default 8 if BATTERY_ADC_CHANNEL_8
+        default 9 if BATTERY_ADC_CHANNEL_9
+
+endmenu

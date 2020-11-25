@@ -1,0 +1,6 @@
+[submodule "components/esp-homekit-sdk"]
+	path = components/esp-homekit-sdk
+	url = git@github.com:espressif/esp-homekit-sdk.git
+[submodule "components/esp-idf-lib"]
+	path = components/esp-idf-lib
+	url = https://github.com/UncleRus/esp-idf-lib
