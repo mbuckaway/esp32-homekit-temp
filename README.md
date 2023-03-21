@@ -15,6 +15,8 @@ The code configures the following services that make up the garage door accessor
 
 It borrows the from the [LIPO Battery Capacity code](https://github.com/G6EJD/LiPo_Battery_Capacity_Estimator).
 
+This version is migrated to ESP-IDF 5.0.
+
 ## Setting up the Device
 
 This project is based on the ESP-IDF. Sorry, no Ardino support...nor will there every be.
