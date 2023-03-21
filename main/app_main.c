@@ -28,7 +28,7 @@
 #include "esp_adc_cal.h"
 #include <dht.h>
 
-static const dht_sensor_type_t sensor_type = DHT_TYPE_AM2301;
+static const dht_sensor_type_t sensor_type = DHT_TYPE_DHT11;
 
 static esp_adc_cal_characteristics_t *adc_chars;
 #if CONFIG_IDF_TARGET_ESP32
@@ -95,7 +95,7 @@ static uint8_t get_battery_level(void)
     // Voltage is half because of the divide resistors. ADC max's out at 2.8V
     voltage*=2;
     float voltage_f = (float)(voltage) / 1000.0;
-    ESP_LOGI(TAG, "Battery Level Raw: %d\tVoltage: %dmV (%0.02fV)", adc_reading, voltage, voltage_f);
+    ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_reading, voltage, voltage_f);
     percentage = (2808.3808 * pow(voltage_f, 4)) - (43560.9157 * pow(voltage_f, 3)) + (252848.5888 * pow(voltage_f, 2)) - (650767.4615 * voltage_f) + 626532.5703;
     if (voltage_f > 4.19) percentage = 100.0;
     else if (voltage_f <= 3.50) percentage = 0.0;
@@ -387,7 +387,7 @@ static void temp_thread_entry(void *p)
 void app_main()
 {
     ESP_LOGI(TAG, "[APP] Startup...");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     esp_log_level_set("*", ESP_LOG_INFO);
