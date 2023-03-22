@@ -129,7 +129,7 @@ static uint8_t get_battery_level(void)
     // Voltage is half because of the divide resistors. ADC max's out at 2.8V
     voltage*=2;
     float voltage_f = (float)(voltage) / 1000.0;
-    ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_raw, voltage, voltage_f);
+    //ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_raw, voltage, voltage_f);
     percentage = (2808.3808 * pow(voltage_f, 4)) - (43560.9157 * pow(voltage_f, 3)) + (252848.5888 * pow(voltage_f, 2)) - (650767.4615 * voltage_f) + 626532.5703;
     if (voltage_f > 4.19) percentage = 100.0;
     else if (voltage_f <= 3.50) percentage = 0.0;
@@ -151,7 +151,7 @@ static int temp_identify(hap_acc_t *ha)
  * An optional HomeKit Event handler which can be used to track HomeKit
  * specific events.
  */
-static void temp_hap_event_handler(void* arg, esp_event_base_t event_base, int event, void *data)
+static void temp_hap_event_handler(void* arg, esp_event_base_t event_base, int32_t event, void *data)
 {
     switch(event) {
         case HAP_EVENT_PAIRING_STARTED :
