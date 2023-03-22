@@ -44,6 +44,9 @@ static void example_adc_calibration_deinit(adc_cali_handle_t handle);
 // static esp_adc_cal_characteristics_t *adc_chars;
 // static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
 // static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+// new ADC driver cali function uses burned in eFuse calibration value, no longer needed? i think?
+// static const int32_t DEFAULT_VREF = 1100;        //Use adc2_vref_to_gpio() to obtain a better estimate
+
 
 static adc_oneshot_unit_handle_t adc1_handle;
 static adc_cali_handle_t adc1_cali_handle = NULL;
@@ -56,7 +59,7 @@ static const adc_bitwidth_t width = ADC_BITWIDTH_12;
 static const adc_bitwidth_t width = ADC_BITWIDTH_12;
 #endif
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
-static const int32_t DEFAULT_VREF = 1100;        //Use adc2_vref_to_gpio() to obtain a better estimate
+
 
 static int adc_raw;
 static int voltage;
@@ -116,7 +119,8 @@ static uint8_t get_battery_level(void)
     // uint32_t adc_reading = adc1_get_raw((adc1_channel_t)CONFIG_BATTERY_ADC_CHANNEL);
     // uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
 
-
+    // I have no idea whatsoever if the new ADC driver was implemented correctly on my end. I think it was?
+    // The new numbers seem reasonable so maybe???
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &adc_raw));
     ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, adc_raw);
     if (do_calibration1) {
@@ -125,11 +129,14 @@ static uint8_t get_battery_level(void)
     }
 
 
+    //I don't use battery, so
+
+    //voltage = 5000;
 
     // Voltage is half because of the divide resistors. ADC max's out at 2.8V
     voltage*=2;
     float voltage_f = (float)(voltage) / 1000.0;
-    //ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_raw, voltage, voltage_f);
+    ESP_LOGI(TAG, "Battery Level Raw: %d\tVoltage: %dmV (%0.02fV)", adc_raw, voltage, voltage_f);
     percentage = (2808.3808 * pow(voltage_f, 4)) - (43560.9157 * pow(voltage_f, 3)) + (252848.5888 * pow(voltage_f, 2)) - (650767.4615 * voltage_f) + 626532.5703;
     if (voltage_f > 4.19) percentage = 100.0;
     else if (voltage_f <= 3.50) percentage = 0.0;
@@ -452,4 +459,71 @@ void app_main()
     ESP_LOGI(TAG, "[APP] Creating main thread...");
 
     xTaskCreate(temp_thread_entry, temp_TASK_NAME, temp_TASK_STACKSIZE, NULL, temp_TASK_PRIORITY, NULL);
+}
+
+
+
+
+
+
+// ADC calibration init function declaration
+// ripped from https://github.com/espressif/esp-idf/blob/release/v5.0/examples/peripherals/adc/oneshot_read/main/oneshot_read_main.c
+static bool example_adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle)
+{
+    adc_cali_handle_t handle = NULL;
+    esp_err_t ret = ESP_FAIL;
+    bool calibrated = false;
+
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    if (!calibrated) {
+        ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
+        adc_cali_curve_fitting_config_t cali_config = {
+            .unit_id = unit,
+            .atten = atten,
+            .bitwidth = width,
+        };
+        ret = adc_cali_create_scheme_curve_fitting(&cali_config, &handle);
+        if (ret == ESP_OK) {
+            calibrated = true;
+        }
+    }
+#endif
+
+#if ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    if (!calibrated) {
+        ESP_LOGI(TAG, "calibration scheme version is %s", "Line Fitting");
+        adc_cali_line_fitting_config_t cali_config = {
+            .unit_id = unit,
+            .atten = atten,
+            .bitwidth = width,
+        };
+        ret = adc_cali_create_scheme_line_fitting(&cali_config, &handle);
+        if (ret == ESP_OK) {
+            calibrated = true;
+        }
+    }
+#endif
+
+    *out_handle = handle;
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Calibration Success");
+    } else if (ret == ESP_ERR_NOT_SUPPORTED || !calibrated) {
+        ESP_LOGW(TAG, "eFuse not burnt, skip software calibration");
+    } else {
+        ESP_LOGE(TAG, "Invalid arg or no memory");
+    }
+
+    return calibrated;
+}
+
+static void example_adc_calibration_deinit(adc_cali_handle_t handle)
+{
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    ESP_LOGI(TAG, "deregister %s calibration scheme", "Curve Fitting");
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_curve_fitting(handle));
+
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    ESP_LOGI(TAG, "deregister %s calibration scheme", "Line Fitting");
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_line_fitting(handle));
+#endif
 }
