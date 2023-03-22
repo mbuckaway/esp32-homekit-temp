@@ -24,21 +24,42 @@
 #include <app_wifi.h>
 #include <app_hap_setup_payload.h>
 
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
+// Deprecated with ESP-IDF 5.0
+//#include "driver/adc.h"
+#include "esp_adc/adc_oneshot.h"
+
+// Deprecated with ESP-IDF 5.0
+//#include "esp_adc_cal.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+
 #include <dht.h>
 
 static const dht_sensor_type_t sensor_type = DHT_TYPE_DHT11;
 
-static esp_adc_cal_characteristics_t *adc_chars;
+static bool example_adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle);
+static void example_adc_calibration_deinit(adc_cali_handle_t handle);
+
+// deprecated with esp-idf 5.0
+// static esp_adc_cal_characteristics_t *adc_chars;
+// static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+// static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+
+static adc_oneshot_unit_handle_t adc1_handle;
+static adc_cali_handle_t adc1_cali_handle = NULL;
+static bool do_calibration1;
+
 #if CONFIG_IDF_TARGET_ESP32
-static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+static const adc_bitwidth_t width = ADC_BITWIDTH_12;
 #elif CONFIG_IDF_TARGET_ESP32S2
 // 13bit ADC will cause issues with battery voltage formula
-static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+static const adc_bitwidth_t width = ADC_BITWIDTH_12;
 #endif
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
 static const int32_t DEFAULT_VREF = 1100;        //Use adc2_vref_to_gpio() to obtain a better estimate
+
+static int adc_raw;
+static int voltage;
 
 /*  Required for server verification during OTA, PEM format as string  */
 char server_cert[] = {};
@@ -90,12 +111,25 @@ static void reset_key_init(uint32_t key_gpio_pin)
 static uint8_t get_battery_level(void)
 {
     float percentage = 100;
-    uint32_t adc_reading = adc1_get_raw((adc1_channel_t)CONFIG_BATTERY_ADC_CHANNEL);
-    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+
+    // deprecated in esp-idf 5.0
+    // uint32_t adc_reading = adc1_get_raw((adc1_channel_t)CONFIG_BATTERY_ADC_CHANNEL);
+    // uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+
+
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &adc_raw));
+    ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, adc_raw);
+    if (do_calibration1) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, adc_raw, &voltage));
+        ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, voltage);
+    }
+
+
+
     // Voltage is half because of the divide resistors. ADC max's out at 2.8V
     voltage*=2;
     float voltage_f = (float)(voltage) / 1000.0;
-    ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_reading, voltage, voltage_f);
+    ESP_LOGI(TAG, "Battery Level Raw: %" PRIu32 "\tVoltage: %" PRIu32 "mV (%0.02fV)", adc_raw, voltage, voltage_f);
     percentage = (2808.3808 * pow(voltage_f, 4)) - (43560.9157 * pow(voltage_f, 3)) + (252848.5888 * pow(voltage_f, 2)) - (650767.4615 * voltage_f) + 626532.5703;
     if (voltage_f > 4.19) percentage = 100.0;
     else if (voltage_f <= 3.50) percentage = 0.0;
@@ -237,11 +271,30 @@ static void temp_thread_entry(void *p)
      */
 
     ESP_LOGI(TAG, "configuring ADC for battery level");
-    adc1_config_width(width);
-    adc1_config_channel_atten(CONFIG_BATTERY_ADC_CHANNEL, atten);
-    adc1_pad_get_io_num( CONFIG_BATTERY_ADC_CHANNEL, &adc_gpio_num );
-    adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_characterize(ADC_UNIT_1, atten, width, DEFAULT_VREF, adc_chars);
+    //deprecated with esp-idf 5.0
+    // adc1_config_width(width);
+    // adc1_config_channel_atten(CONFIG_BATTERY_ADC_CHANNEL, atten);
+    // adc1_pad_get_io_num( CONFIG_BATTERY_ADC_CHANNEL, &adc_gpio_num );
+    // adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    // esp_adc_cal_characterize(ADC_UNIT_1, atten, width, DEFAULT_VREF, adc_chars);
+
+    // new implementation
+    //-------------ADC1 Init---------------//
+
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
+
+    //-------------ADC1 Config---------------//
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = width,
+        .atten = atten,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &config));
+
+    //-------------ADC1 Calibration Init---------------//
+    do_calibration1 = example_adc_calibration_init(ADC_UNIT_1, atten, &adc1_cali_handle);
     ESP_LOGI(TAG, "Battery Level ADC running on GPIO %d", adc_gpio_num);
 
     /* Configure HomeKit core to make the Accessory name (and thus the WAC SSID) unique,
