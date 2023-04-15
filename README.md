@@ -17,6 +17,8 @@ It borrows the from the [LIPO Battery Capacity code](https://github.com/G6EJD/Li
 
 This version is migrated to ESP-IDF 5.0, as well as the new ADC driver.
 
+esptool.py --chip esp32 p com7 erase_flash
+
 ## Setting up the Device
 
 This project is based on the ESP-IDF. Sorry, no Ardino support...nor will there every be.
