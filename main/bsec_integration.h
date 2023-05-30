@@ -101,9 +101,12 @@ typedef void (*sleep_fct)(uint32_t t_us,void *intf_ptr);
 typedef int64_t (*get_timestamp_us_fct)();
 
 /* function pointer to the function processing obtained BSEC outputs */
-typedef void (*output_ready_fct)(int64_t timestamp, float gas_estimate_1, float gas_estimate_2, float gas_estimate_3, float gas_estimate_4,
-     float raw_pressure, float raw_temp, float raw_humidity, float raw_gas, uint8_t raw_gas_index, bsec_library_return_t bsec_status);
+// typedef void (*output_ready_fct)(int64_t timestamp, float gas_estimate_1, float gas_estimate_2, float gas_estimate_3, float gas_estimate_4,
+//      float raw_pressure, float raw_temp, float raw_humidity, float raw_gas, uint8_t raw_gas_index, bsec_library_return_t bsec_status);
 
+typedef void (*output_ready_fct)(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq, uint8_t siaq_accuracy, float compensateTemperature, float compensateHumidity,
+     float raw_pressure, float raw_temp, float raw_humidity, float raw_gas, float co2, float bVOC, bsec_library_return_t bsec_status);
+	 
 /* function pointer to the function loading a previous BSEC state from NVM */
 typedef uint32_t (*state_load_fct)(uint8_t *state_buffer, uint32_t n_buffer);
 
