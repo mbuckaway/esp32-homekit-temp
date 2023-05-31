@@ -50,6 +50,7 @@
 #define ACTIVE_I2C      I2C_NUM_1
 
 #define SENSOR_IN_USE   1 /*!< set to 1 for BME68X and 2 for DHT */
+#define LCD1602_IN_USE 1 /* Set to 1 if LCD1602A screen is present and 0 if not*/
 
 static const char* sensor_binary = "sensor_blob";
 
@@ -211,6 +212,27 @@ static float BME68xsIAQ = 0.0;
 static float BME68xC02 = 0.0;
 static float BME68xbVOC = 0.0;
 
+
+static hd44780_t lcd = {
+    .write_cb = NULL,
+    .font = HD44780_FONT_5X8,
+    .lines = 2,
+    .pins = {
+        .rs = GPIO_NUM_19,
+        .e  = GPIO_NUM_23,
+        .d4 = GPIO_NUM_18,
+        .d5 = GPIO_NUM_17,
+        .d6 = GPIO_NUM_16,
+        .d7 = GPIO_NUM_15,
+        .bl = HD44780_NOT_USED
+    }
+};
+
+static const uint8_t char_data[] = {
+    0x04, 0x0e, 0x0e, 0x0e, 0x1f, 0x00, 0x04, 0x00,
+    0x1f, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x1f, 0x00
+};
+
 void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq, uint8_t siaq_accuracy, float compensateTemperature, float compensateHumidity,
      float raw_pressure, float raw_temp, float raw_humidity, float raw_gas, float co2, float bVOC, bsec_library_return_t bsec_status) {
     // ...
@@ -224,6 +246,11 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     BME68xbVOC = bVOC;
     
     ESP_LOGI("BME 680", "[timestamp: %"PRId64"] [IAQ reading: %f] [IAQ Accuracy: %d] [SIAQ reading: %f] [sIAQ Accuracy: %d] [Compensated Temperature: %f] [Compensated Humidity: %f] [raw_pressure: %f] [raw_temp: %f] [raw_humidity: %f] [raw_gas: %f] [co2_equivalent: %f] [bVOC: %f] [bsec_status: %d]\n", timestamp, iaq, iaq_accuracy, siaq, siaq_accuracy, compensateTemperature, compensateHumidity, raw_pressure, raw_temp, raw_humidity, raw_gas, co2, bVOC, bsec_status);
+
+    // Print out results to HD44780 Screen
+    hd44780_upload_character(&lcd, 0, char_data);
+    hd44780_upload_character(&lcd, 1, char_data + 8);
+    hd44780_puts(&lcd, "\x08 Hello wodsfadsf\ndsafsdafrld!");
 }
 
 float bm68xtempReturn(hap_char_t *hc, hap_status_t *status_code, void *serv_priv, void *read_priv) {
@@ -919,6 +946,10 @@ void app_main()
     // task to poll bme680 sensor and initialize it 
     if (SENSOR_IN_USE == 1) {
         xTaskCreate(bSECReadTask, "bSECSensorPoll", BSEC_STACK_SIZE, NULL, temp_TASK_PRIORITY, NULL);
+    }
+
+    if (LCD1602_IN_USE == 1){
+        ESP_ERROR_CHECK(hd44780_init(&lcd));
     }
     
 }
