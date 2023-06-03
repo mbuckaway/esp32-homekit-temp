@@ -40,7 +40,7 @@
 
 // Library for HD44780 Screen Support
 #include <hd44780.h>
-
+#include <sys/time.h>
 
 #define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
@@ -228,10 +228,6 @@ static hd44780_t lcd = {
     }
 };
 
-static const uint8_t char_data[] = {
-    0x04, 0x0e, 0x0e, 0x0e, 0x1f, 0x00, 0x04, 0x00,
-    0x1f, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x1f, 0x00
-};
 
 void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq, uint8_t siaq_accuracy, float compensateTemperature, float compensateHumidity,
      float raw_pressure, float raw_temp, float raw_humidity, float raw_gas, float co2, float bVOC, bsec_library_return_t bsec_status) {
@@ -239,7 +235,7 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     // Please insert system specific code to further process or display the BSEC outputs
     // ...
 
-    BME68xtemperature = compensateTemperature;
+    BME68xtemperature = compensateTemperature - 2;
     BME68xhumidity = compensateHumidity;
     BME68xsIAQ = siaq;
     BME68xC02 = co2;
@@ -248,9 +244,18 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     ESP_LOGI("BME 680", "[timestamp: %"PRId64"] [IAQ reading: %f] [IAQ Accuracy: %d] [SIAQ reading: %f] [sIAQ Accuracy: %d] [Compensated Temperature: %f] [Compensated Humidity: %f] [raw_pressure: %f] [raw_temp: %f] [raw_humidity: %f] [raw_gas: %f] [co2_equivalent: %f] [bVOC: %f] [bsec_status: %d]\n", timestamp, iaq, iaq_accuracy, siaq, siaq_accuracy, compensateTemperature, compensateHumidity, raw_pressure, raw_temp, raw_humidity, raw_gas, co2, bVOC, bsec_status);
 
     // Print out results to HD44780 Screen
-    hd44780_upload_character(&lcd, 0, char_data);
-    hd44780_upload_character(&lcd, 1, char_data + 8);
-    hd44780_puts(&lcd, "\x08 Hello wodsfadsf\ndsafsdafrld!");
+
+    char line1[16];
+    char line2[16];
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    snprintf(line1, 16, "T: %.2lfF C: %d", ((BME68xtemperature * 9 / 5) + 32), (int)(tv.tv_sec/3600));
+    hd44780_gotoxy(&lcd, 0, 0);
+    hd44780_puts(&lcd, line1);
+    hd44780_gotoxy(&lcd, 0, 1);
+    snprintf(line2, 16, "H: %d%% sAQI: %d", (int)round(BME68xhumidity), (int)round(BME68xsIAQ));
+    hd44780_puts(&lcd, line2);
+
 }
 
 float bm68xtempReturn(hap_char_t *hc, hap_status_t *status_code, void *serv_priv, void *read_priv) {
@@ -325,7 +330,7 @@ int bm68xIAQReturn(hap_char_t *hc, hap_status_t *status_code, void *serv_priv, v
     if (!strcmp(hap_char_get_type_uuid(hc), HAP_CHAR_UUID_VOC_DENSITY)) 
     {
         hap_val_t new_val;
-        new_val.f = BME68xbVOC; 
+        new_val.f = BME68xbVOC + 1; 
         hap_char_update_val(hc, &new_val);
         *status_code = HAP_STATUS_SUCCESS;
         ESP_LOGI(TAG, "VOC value updated to %0.01f", new_val.f);
@@ -703,7 +708,7 @@ static void temp_thread_entry(void *p)
         .name = "Esp-Term",
         .manufacturer = "Espressif",
         .model = "EspTermp01",
-        .serial_num = "001122334455",
+        .serial_num = "001122334466",
         .fw_rev = "1.0.0",
         .hw_rev =  (char*)esp_get_idf_version(),
         .pv = "1.0.0",
@@ -760,8 +765,8 @@ static void temp_thread_entry(void *p)
         ESP_LOGI(TAG, "Creating AQI service (current humidity: %d)", aqiReading);
         /* Create the aqi Service. Include the "name" since this is a user visible service  */
         aqiService = hap_serv_air_quality_sensor_create(aqiReading);
-        VOCService = hap_char_voc_density_create(vocReading);
-        co2Service = hap_char_carbon_dioxide_level_create(co2Reading);
+        VOCService = hap_char_voc_density_create(vocReading + 1);
+        co2Service = hap_char_carbon_dioxide_level_create(co2Reading + 1);
         hap_serv_add_char(aqiService, hap_char_name_create("ESP AQI Sensor"));
         hap_serv_add_char(aqiService, co2Service);
         hap_serv_add_char(aqiService, VOCService);
@@ -842,6 +847,7 @@ static void temp_thread_entry(void *p)
 
     /* After all the initializations are done, start the HAP core */
     ESP_LOGI(TAG, "Starting HAP...");
+    hap_http_debug_enable();
     hap_start();
 
     /* Start Wi-Fi */
