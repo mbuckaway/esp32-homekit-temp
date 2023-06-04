@@ -235,7 +235,7 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     // Please insert system specific code to further process or display the BSEC outputs
     // ...
 
-    BME68xtemperature = compensateTemperature - 2;
+    BME68xtemperature = compensateTemperature;
     BME68xhumidity = compensateHumidity;
     BME68xsIAQ = siaq;
     BME68xC02 = co2;
@@ -245,15 +245,15 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
 
     // Print out results to HD44780 Screen
 
-    char line1[16];
-    char line2[16];
+    char line1[17];
+    char line2[17];
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    snprintf(line1, 16, "T: %.2lfF C: %d", ((BME68xtemperature * 9 / 5) + 32), (int)(tv.tv_sec/3600));
+    snprintf(line1, 17, "T: %.2lfF C: %d", ((BME68xtemperature * 9 / 5) + 32), (int)(tv.tv_sec/3600));
     hd44780_gotoxy(&lcd, 0, 0);
     hd44780_puts(&lcd, line1);
     hd44780_gotoxy(&lcd, 0, 1);
-    snprintf(line2, 16, "H: %d%% sAQI: %d", (int)round(BME68xhumidity), (int)round(BME68xsIAQ));
+    snprintf(line2, 17, "H: %d%% sAQI: %d", (int)round(BME68xhumidity), (int)round(BME68xsIAQ));
     hd44780_puts(&lcd, line2);
 
 }
@@ -456,7 +456,7 @@ int initialize_sensor()
     /* Call to the function which initializes the BSEC library BSEC_SAMPLE_RATE_SCAN
      * Switch on low-power mode and provide no temperature offset BSEC_SAMPLE_RATE_LP */ //BSEC_SAMPLE_RATE_ULP
     //void bsec_iot_init(float sample_rate, float temperature_offset, bme68x_write_fptr_t bus_write, bme68x_read_fptr_t bus_read, sleep_fct sleep_n, state_load_fct state_load, config_load_fct config_load, struct bme68x_dev dev);
-    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 0.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
+    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, -20.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
     if (ret.bme68x_status)
     {
         /* Could not initialize BME680 */
@@ -847,7 +847,7 @@ static void temp_thread_entry(void *p)
 
     /* After all the initializations are done, start the HAP core */
     ESP_LOGI(TAG, "Starting HAP...");
-    hap_http_debug_enable();
+    //hap_http_debug_enable();
     hap_start();
 
     /* Start Wi-Fi */
