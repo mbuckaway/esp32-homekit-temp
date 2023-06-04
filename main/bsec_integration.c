@@ -201,6 +201,8 @@ return_values_init bsec_iot_init(float sample_rate, float temperature_offset, bm
     bme68x_g.read = bus_read;
     bme68x_g.write = bus_write;
     bme68x_g.delay_us = sleep;
+
+    extTempOffset = temperature_offset;
 	
     /* Initialize bme68x API */
     ret.bme68x_status = bme68x_init(&bme68x_g);

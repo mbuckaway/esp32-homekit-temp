@@ -456,7 +456,7 @@ int initialize_sensor()
     /* Call to the function which initializes the BSEC library BSEC_SAMPLE_RATE_SCAN
      * Switch on low-power mode and provide no temperature offset BSEC_SAMPLE_RATE_LP */ //BSEC_SAMPLE_RATE_ULP
     //void bsec_iot_init(float sample_rate, float temperature_offset, bme68x_write_fptr_t bus_write, bme68x_read_fptr_t bus_read, sleep_fct sleep_n, state_load_fct state_load, config_load_fct config_load, struct bme68x_dev dev);
-    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, -20.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
+    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 4.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
     if (ret.bme68x_status)
     {
         /* Could not initialize BME680 */
@@ -765,8 +765,8 @@ static void temp_thread_entry(void *p)
         ESP_LOGI(TAG, "Creating AQI service (current humidity: %d)", aqiReading);
         /* Create the aqi Service. Include the "name" since this is a user visible service  */
         aqiService = hap_serv_air_quality_sensor_create(aqiReading);
-        VOCService = hap_char_voc_density_create(vocReading + 1);
-        co2Service = hap_char_carbon_dioxide_level_create(co2Reading + 1);
+        VOCService = hap_char_voc_density_create(vocReading);
+        co2Service = hap_char_carbon_dioxide_level_create(co2Reading);
         hap_serv_add_char(aqiService, hap_char_name_create("ESP AQI Sensor"));
         hap_serv_add_char(aqiService, co2Service);
         hap_serv_add_char(aqiService, VOCService);
