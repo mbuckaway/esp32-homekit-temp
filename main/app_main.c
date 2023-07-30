@@ -51,6 +51,7 @@
 
 #define SENSOR_IN_USE   1 /*!< set to 1 for BME68X and 2 for DHT */
 #define LCD1602_IN_USE 1 /* Set to 1 if LCD1602A screen is present and 0 if not*/
+#define LDR_ADC_CHANNEL 6 /* ADC channel of the photoresistor, set to 99 if not in use */
 
 static const char* sensor_binary = "sensor_blob";
 
@@ -60,7 +61,7 @@ static const dht_sensor_type_t sensor_type = DHT_TYPE_AM2301;
 static bool example_adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle);
 static void example_adc_calibration_deinit(adc_cali_handle_t handle);
 
-    static adc_oneshot_unit_handle_t adc1_handle;
+static adc_oneshot_unit_handle_t adc1_handle;
 static adc_cali_handle_t adc1_cali_handle = NULL;
 static bool do_calibration1;
 
@@ -73,8 +74,10 @@ static const adc_bitwidth_t width = ADC_BITWIDTH_12;
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
 
 
-static int adc_raw;
+static int adc_raw_battery;
+static int adc_raw_LDR;
 static int voltage;
+static int adc_cali_LDR;
 
 /*  Required for server verification during OTA, PEM format as string  */
 char server_cert[] = {};
@@ -243,6 +246,14 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     
     ESP_LOGI("BME 680", "[timestamp: %"PRId64"] [IAQ reading: %f] [IAQ Accuracy: %d] [SIAQ reading: %f] [sIAQ Accuracy: %d] [Compensated Temperature: %f] [Compensated Humidity: %f] [raw_pressure: %f] [raw_temp: %f] [raw_humidity: %f] [raw_gas: %f] [co2_equivalent: %f] [bVOC: %f] [bsec_status: %d]\n", timestamp, iaq, iaq_accuracy, siaq, siaq_accuracy, compensateTemperature, compensateHumidity, raw_pressure, raw_temp, raw_humidity, raw_gas, co2, bVOC, bsec_status);
 
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, LDR_ADC_CHANNEL, &adc_raw_LDR));
+    ESP_LOGI(TAG, "ADC%d Channel[%d] LDR Raw Data: %d", ADC_UNIT_1 + 1, LDR_ADC_CHANNEL, adc_raw_LDR);
+    // for this use case, raw data is more useful. this ldr is pretty useless for this though
+    if (do_calibration1) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, adc_raw_LDR, &adc_cali_LDR));
+        ESP_LOGI(TAG, "ADC%d Channel[%d] Cali LDR Voltage: %d mV", ADC_UNIT_1 + 1, LDR_ADC_CHANNEL, adc_cali_LDR);
+    }
+
     // Print out results to HD44780 Screen
 
     char line1[17];
@@ -253,7 +264,7 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float siaq
     hd44780_gotoxy(&lcd, 0, 0);
     hd44780_puts(&lcd, line1);
     hd44780_gotoxy(&lcd, 0, 1);
-    snprintf(line2, 17, "H: %d%% sAQI: %d", (int)round(BME68xhumidity), (int)round(BME68xsIAQ));
+    snprintf(line2, 17, "H: %d%% sAQI: %d  ", (int)round(BME68xhumidity), (int)round(BME68xsIAQ));
     hd44780_puts(&lcd, line2);
 
 }
@@ -335,6 +346,27 @@ int bm68xIAQReturn(hap_char_t *hc, hap_status_t *status_code, void *serv_priv, v
         *status_code = HAP_STATUS_SUCCESS;
         ESP_LOGI(TAG, "VOC value updated to %0.01f", new_val.f);
     }       
+
+    return HAP_SUCCESS;
+}
+
+float ldrVoltageReturn(hap_char_t *hc, hap_status_t *status_code, void *serv_priv, void *read_priv) {
+    if (hap_req_get_ctrl_id(read_priv)) {
+        ESP_LOGI(TAG, "LDR sensor received read from %s", hap_req_get_ctrl_id(read_priv));
+    }
+
+    if (!strcmp(hap_char_get_type_uuid(hc), HAP_CHAR_UUID_CURRENT_AMBIENT_LIGHT_LEVEL)) 
+    {
+        hap_val_t new_val;
+        new_val.f = (int)adc_raw_LDR;
+        if (new_val.f >= 750) {
+            new_val.f = new_val.f + 300;
+        }
+        new_val.f = new_val.f / 10;
+        hap_char_update_val(hc, &new_val);
+        *status_code = HAP_STATUS_SUCCESS;
+        ESP_LOGI(TAG,"LDR status updated to %0.01f%%", new_val.f);
+    }
 
     return HAP_SUCCESS;
 }
@@ -456,7 +488,7 @@ int initialize_sensor()
     /* Call to the function which initializes the BSEC library BSEC_SAMPLE_RATE_SCAN
      * Switch on low-power mode and provide no temperature offset BSEC_SAMPLE_RATE_LP */ //BSEC_SAMPLE_RATE_ULP
     //void bsec_iot_init(float sample_rate, float temperature_offset, bme68x_write_fptr_t bus_write, bme68x_read_fptr_t bus_read, sleep_fct sleep_n, state_load_fct state_load, config_load_fct config_load, struct bme68x_dev dev);
-    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 4.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
+    ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 2.0f, bus_write, bus_read, bme680_sleep, state_load, config_load, bme_dev);
     if (ret.bme68x_status)
     {
         /* Could not initialize BME680 */
@@ -508,10 +540,13 @@ static void reset_key_init(uint32_t key_gpio_pin)
 static uint8_t get_battery_level(void)
 {
     float percentage = 100;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &adc_raw));
-    ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, adc_raw);
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &adc_raw_battery
+));
+    ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, adc_raw_battery
+);
     if (do_calibration1) {
-        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, adc_raw, &voltage));
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, adc_raw_battery
+    , &voltage));
         ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, CONFIG_BATTERY_ADC_CHANNEL, voltage);
     }
 
@@ -522,7 +557,8 @@ static uint8_t get_battery_level(void)
     // Voltage is half because of the divide resistors. ADC max's out at 2.8V
     voltage*=2;
     float voltage_f = (float)(voltage) / 1000.0;
-    ESP_LOGI(TAG, "Battery Level Raw: %d\tVoltage: %dmV (%0.02fV)", adc_raw, voltage, voltage_f);
+    ESP_LOGI(TAG, "Battery Level Raw: %d\tVoltage: %dmV (%0.02fV)", adc_raw_battery
+, voltage, voltage_f);
     percentage = (2808.3808 * pow(voltage_f, 4)) - (43560.9157 * pow(voltage_f, 3)) + (252848.5888 * pow(voltage_f, 2)) - (650767.4615 * voltage_f) + 626532.5703;
     if (voltage_f > 4.19) percentage = 100.0;
     else if (voltage_f <= 3.50) percentage = 0.0;
@@ -654,16 +690,21 @@ static void temp_thread_entry(void *p)
     hap_acc_t *tempaccessory = NULL;
     hap_serv_t *tempservice = NULL;
     hap_serv_t *humidityservice = NULL;
-    hap_serv_t *aqiService = NULL;
     hap_serv_t *battery_service = NULL;
+    hap_serv_t *ldrService = NULL;
+    
+
+    hap_serv_t *aqiService = NULL;
     hap_char_t *VOCService = NULL;
     hap_char_t *co2Service = NULL;
+
     int adc_gpio_num = 0;
     float temperature = 0.0;
     float humidity = 0.0;
     int aqiReading = 0;
     float vocReading = 0;
     float co2Reading = 0;
+    float luxVoltReading = 0;
     /*BME68xC02;BME68xbVOC;
      * Configure the ADC for reading battery level
      */
@@ -683,6 +724,7 @@ static void temp_thread_entry(void *p)
         .atten = atten,
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, CONFIG_BATTERY_ADC_CHANNEL, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, LDR_ADC_CHANNEL, &config));
 
     //-------------ADC1 Calibration Init---------------//
     do_calibration1 = example_adc_calibration_init(ADC_UNIT_1, atten, &adc1_cali_handle);
@@ -708,7 +750,7 @@ static void temp_thread_entry(void *p)
         .name = "Esp-Term",
         .manufacturer = "Espressif",
         .model = "EspTermp01",
-        .serial_num = "001122334466",
+        .serial_num = "001122334477",
         .fw_rev = "1.0.0",
         .hw_rev =  (char*)esp_get_idf_version(),
         .pv = "1.0.0",
@@ -774,6 +816,17 @@ static void temp_thread_entry(void *p)
         hap_serv_set_read_cb(aqiService, bm68xIAQReturn);
         /* Add the AQI Service to the Accessory Object */
         hap_acc_add_serv(tempaccessory, aqiService);
+    }   
+
+    if (LDR_ADC_CHANNEL != 99) {
+        ESP_LOGI(TAG, "Creating Lux service (current mV of LDR: %f)", luxVoltReading);
+        /* Create the Lux Service. Include the "name" since this is a user visible service  */
+        ldrService = hap_serv_light_sensor_create(luxVoltReading);
+        hap_serv_add_char(ldrService, hap_char_name_create("ESP LDR Sensor"));
+        /* Set the read callback for the service (optional) */
+        hap_serv_set_read_cb(ldrService, ldrVoltageReturn);
+        /* Add the AQI Service to the Accessory Object */
+        hap_acc_add_serv(tempaccessory, ldrService);
     }    
 
     
